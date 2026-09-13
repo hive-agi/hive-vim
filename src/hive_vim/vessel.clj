@@ -6,7 +6,10 @@
    No dependency on hive-vessel: a target is a plain map, so the contract is
    the shape. hive-vessel lowers an action to [\"call\" fn args] and calls
    :vessel/execute!; the payload travels over the same session-managed,
-   reconnecting channel HVCP verbs use."
+   reconnecting channel HVCP verbs use.
+
+   An op batch is not a transaction: dispatch! stops at the first op whose
+   execution throws and reports how many already ran."
   (:require [hive-addon.vessel :as vessel]
             [hive-dsl.result :as r]
             [hive-vim.client :as client]
@@ -42,8 +45,11 @@
 (defn execute!
   "Run a lowered hive-vessel op on SERVER. Returns the value Vim answered.
 
-   Throws ex-info on failure, which is what hive-vessel's translator fallback
-   expects: a candidate that throws is abandoned for the next one."
+   Throws ex-info on failure. hive-vessel's dispatch! reports that as
+   {:error {:failure/reason :execute-threw}} carrying how many ops of the batch
+   already ran: a loud dispatch failure, never a silent drop. Translator
+   fallback is a separate mechanism and applies to TRANSLATION failures only,
+   so a Vim that is down does not silently re-route to another lowering."
   [server opts {:native/keys [payload] :as op}]
   (when-not (= dialect (:native/dialect op))
     (throw (ex-info "the Vim vessel executes :vim-channel only"

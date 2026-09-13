@@ -65,7 +65,7 @@
     (is (empty? @frames) "no reply is awaited")
     (fake/stop! vim)))
 
-(deftest failures-throw-so-translators-can-fall-through
+(deftest failures-throw-and-surface-as-dispatch-errors
   (testing "no session"
     (let [target (vessel/vessel-target *server*)]
       (is (thrown? clojure.lang.ExceptionInfo

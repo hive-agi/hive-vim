@@ -102,6 +102,17 @@
                 (is (= (mapv :text (render-lines doc)) (:value painted))
                     "Vim painted exactly the rendered lines"))))
 
+          (testing "an executor failure is a loud dispatch error, not a silent drop"
+            ;; Translator fallback covers TRANSLATION failures only. A throwing
+            ;; executor stops the batch and reports how many ops already ran.
+            (let [dead (vessel/vessel-target (vim-addon/server a) {:session "vim-404"})
+                  result (dispatch! registry dead
+                                    [{:op :ui/notify :message "one"}
+                                     {:op :ui/notify :message "two"}])]
+              (is (nil? (:ok result)))
+              (is (= :execute-threw (get-in result [:error :failure/reason])))
+              (is (zero? (get-in result [:error :failure/detail :completed])))))
+
           (testing "a dialect escape hatch rides the same channel"
             (is (:ok (run {:op :vim/ex :command "let g:hive_vim_e2e = 'ok'"})))
             (is (wait-until 2000
