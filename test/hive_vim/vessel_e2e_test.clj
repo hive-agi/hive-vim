@@ -25,11 +25,21 @@
   (try (requiring-resolve sym) (catch Exception _ nil)))
 
 (def ^:private vessel-runtime
-  "hive-vessel's Vim plugin directory, from the classpath, or nil when hive-vessel
-   is absent or packaged in a jar."
-  (when-let [url (io/resource "hive-vessel/vim")]
-    (when (= "file" (.getProtocol url))
-      (.getCanonicalPath (io/file (.toURI url))))))
+  "hive-vessel's Vim plugin directory: the classpath directory when hive-vessel
+   is a source checkout (local.deps.edn), else its four runtime files extracted
+   from the published jar into a temp dir. nil when hive-vessel is absent."
+  (when (io/resource "hive-vessel/vim/plugin/hive_vessel.vim")
+    (let [url (io/resource "hive-vessel/vim")]
+      (if (and url (= "file" (.getProtocol url)))
+        (.getCanonicalPath (io/file (.toURI url)))
+        (let [dir (.toFile (Files/createTempDirectory "hive-vim-vessel-rt" (make-array FileAttribute 0)))]
+          (doseq [f ["plugin/hive_vessel.vim" "autoload/hive_vessel.vim"
+                     "autoload/hive_vessel/ops.vim" "autoload/hive_vessel/wire.vim"]
+                  :let [out (io/file dir f)]]
+            (io/make-parents out)
+            (with-open [in (io/input-stream (io/resource (str "hive-vessel/vim/" f)))]
+              (io/copy in out)))
+          (.getCanonicalPath dir))))))
 
 (defn- available?
   []
