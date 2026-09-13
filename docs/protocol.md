@@ -18,7 +18,10 @@ The Clojure source of truth is `hive-vim.protocol.*` (`schema`, `codec`,
 
 ## L0: wire
 
-Every message is one JSON array. Frames are classified by their first element:
+Every message is one JSON array on its own line. Vim terminates each channel
+message with a newline and JSON escapes newlines inside strings, so a frame is
+exactly one line; hive writes frames the same way. Frames are classified by
+their first element:
 
 | Frame | Direction | Meaning |
 |---|---|---|
