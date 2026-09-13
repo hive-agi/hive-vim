@@ -1,8 +1,15 @@
 # HVCP v1: hive Vim Control Protocol
 
-HVCP is the only sanctioned way hive controls a Vim instance. It sits on top of
-Vim's built-in JSON channel (`:help channel`) and adds a fixed dispatch entry, a
-handshake, a verb catalogue and an event stream.
+> **Scope (2026-09-13).** Editor ACTIONS are standardized by
+> [hive-vessel](../../hive-vessel): an op is lowered for the `:vim-channel`
+> dialect and executed by `hive-vim.vessel/vessel-target`, over the transport
+> described here. HVCP is hive-vim's transport plus its QUERY layer (the
+> hive-spi editor port under `:vim`). It is not a competing editor standard;
+> see decision 20260913080051-08ee41bc.
+
+HVCP is how hive queries and drives a Vim instance beneath that standard. It
+sits on top of Vim's built-in JSON channel (`:help channel`) and adds a fixed
+dispatch entry, a handshake, a verb catalogue and an event stream.
 
 The Clojure source of truth is `hive-vim.protocol.*` (`schema`, `codec`,
 `verbs`); this document describes it and must not contradict it.

@@ -1,7 +1,15 @@
 (ns hive-vim.vessel
-  "The Vim vessel: a neutral descriptor (the hive-emacs.vessel shape) and an
-   IVessel reification of it."
+  "The Vim vessel: a neutral descriptor (the hive-emacs.vessel shape), an
+   IVessel reification of it, and the hive-vessel target that executes
+   :vim-channel ops over this addon's transport.
+
+   No dependency on hive-vessel: a target is a plain map, so the contract is
+   the shape. hive-vessel lowers an action to [\"call\" fn args] and calls
+   :vessel/execute!; the payload travels over the same session-managed,
+   reconnecting channel HVCP verbs use."
   (:require [hive-addon.vessel :as vessel]
+            [hive-dsl.result :as r]
+            [hive-vim.client :as client]
             [taoensso.timbre :as log]))
 
 ;; Copyright (C) 2026 Pedro Gomes Branquinho (BuddhiLW) <pedrogbranquinho@gmail.com>
@@ -26,6 +34,36 @@
    :vessel/shutdown! (fn []
                        (log/info "Vim vessel shut down")
                        nil)})
+
+(def dialect
+  "The hive-vessel dialect this vessel speaks."
+  :vim-channel)
+
+(defn execute!
+  "Run a lowered hive-vessel op on SERVER. Returns the value Vim answered.
+
+   Throws ex-info on failure, which is what hive-vessel's translator fallback
+   expects: a candidate that throws is abandoned for the next one."
+  [server opts {:native/keys [payload] :as op}]
+  (when-not (= dialect (:native/dialect op))
+    (throw (ex-info "the Vim vessel executes :vim-channel only"
+                    {:dialect (:native/dialect op)})))
+  (let [result (client/execute-native! server opts payload)]
+    (if (r/ok? result)
+      (:ok result)
+      (throw (ex-info (str "vim vessel: " (:message result))
+                      {:error (:error result) :payload payload})))))
+
+(defn vessel-target
+  "A hive-vessel target backed by SERVER: {:vessel/id :vim :vessel/dialect
+   :vim-channel :vessel/execute! f}. OPTS may pin a :session or :timeout-ms,
+   and :features advertises addon-specific capabilities to translator guards."
+  ([server] (vessel-target server {}))
+  ([server {:keys [features] :as opts}]
+   (cond-> {:vessel/id :vim
+            :vessel/dialect dialect
+            :vessel/execute! (fn [op] (execute! server (dissoc opts :features) op))}
+     features (assoc :vessel/features features))))
 
 (defn ->ivessel
   "An IVessel over DESCRIPTOR."

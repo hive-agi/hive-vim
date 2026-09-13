@@ -41,11 +41,22 @@
     (.write w "\n")
     (.flush w)))
 
+(declare start!)
+
+(defn start-raw!
+  "Like start!, but HANDLER is (fn [vim-fn args] -> reply) and its value is sent
+   back verbatim, the way a real Vim function answers a channel call. Use it for
+   hive-vessel payloads, which call Vim functions directly rather than through
+   hive#rpc#dispatch."
+  [server handler]
+  (start! server handler {:raw? true}))
+
 (defn start!
   "Connect to SERVER and serve dispatch calls with HANDLER (fn [verb params] ->
    envelope). Every call is recorded in :calls. Returns the fake."
   ([server] (start! server default-handler))
-  ([server handler]
+  ([server handler] (start! server handler {}))
+  ([server handler {:keys [raw?]}]
    (let [socket (Socket. "127.0.0.1" (int (t/port server)))
          reader (BufferedReader. (InputStreamReader. (.getInputStream socket)
                                                      StandardCharsets/UTF_8))
@@ -62,7 +73,8 @@
                 (loop []
                   (let [frame (t/read-frame reader)]
                     (when (vector? frame)
-                      (let [[kind _fn [verb params] id] frame]
+                      (let [[kind vim-fn args id] frame
+                            [verb params] (if raw? [vim-fn args] args)]
                         (when (= "call" kind)
                           (swap! calls conj [verb params])
                           (send-frame writer
