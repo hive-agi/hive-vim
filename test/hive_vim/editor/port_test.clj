@@ -53,10 +53,11 @@
 
 (deftest every-spi-method-reaches-vim-through-its-verb
   (let [vim (fake/start! *server*)
-        p (port/->port (constantly *server*))]
+        p (port/->port (constantly *server*))
+        editor-verbs (filter #(#{:substrate :buffer} (:surface %)) verbs/catalogue)]
     (wait-sessions 1)
-    (is (= (set (keys method-fns)) (set (map :spi-method verbs/catalogue))))
-    (doseq [{:keys [verb spi-method params]} verbs/catalogue
+    (is (= (set (keys method-fns)) (set (map :spi-method editor-verbs))))
+    (doseq [{:keys [verb spi-method params]} editor-verbs
             :let [args (malli.generator/generate params {:seed 5 :size 2})
                   response ((method-fns spi-method) p args)]]
       (is (not (:isError response)) (str spi-method " " (:text response)))

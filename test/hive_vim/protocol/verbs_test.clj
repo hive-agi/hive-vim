@@ -8,7 +8,8 @@
             [hive-vim.protocol.schema :as s]
             [hive-vim.protocol.verbs :as verbs]
             [malli.core :as m]
-            [malli.generator :as mg]))
+            [malli.generator :as mg]
+            [hive-addon.terminal :as term]))
 
 ;; Copyright (C) 2026 Pedro Gomes Branquinho (BuddhiLW) <pedrogbranquinho@gmail.com>
 ;;
@@ -36,6 +37,10 @@
   (testing "the buffer verbs back every IEditorBufferPort method, and only those"
     (is (= (protocol-methods ports/IEditorBufferPort)
            (set (map :spi-method (filter #(= :buffer (:surface %))
+                                         verbs/catalogue))))))
+  (testing "the terminal verbs back every ITerminalAddon call to Vim, plus terminal-read"
+    (is (= (conj (disj (protocol-methods term/ITerminalAddon) :terminal-id) :terminal-read)
+           (set (map :spi-method (filter #(= :terminal (:surface %))
                                          verbs/catalogue)))))))
 
 (def ^:private gen-verb-and-params

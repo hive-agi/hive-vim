@@ -50,6 +50,9 @@
 ;;; Catalogue
 ;;; ============================================================================
 
+(def TerminalRef
+  [:map [:id [:string {:min 1}]]])
+
 (def catalogue
   "Every HVCP v1 verb, in presentation order."
   [{:verb "eval" :surface :substrate :spi-method :editor-eval
@@ -127,7 +130,35 @@
               [:buffers [:vector Buffer]]
               [:project_root [:maybe :string]]
               [:tabs :int]
-              [:windows :int]]}])
+              [:windows :int]]}
+   {:verb "terminal-spawn" :surface :terminal :spi-method :terminal-spawn!
+    :doc "Start argv cmd in a hidden terminal buffer named hive:<id>"
+    :params (m/form (mu/merge TerminalRef
+                              [:map
+                               [:cmd [:vector {:min 1} [:string {:min 1}]]]
+                               [:cwd {:optional true} [:string {:min 1}]]
+                               [:env {:optional true} [:map-of :string :string]]]))
+    :returns [:map [:id :string] [:buffer :int] [:name :string]]}
+   {:verb "terminal-dispatch" :surface :terminal :spi-method :terminal-dispatch!
+    :doc "Type text followed by Enter into a running terminal"
+    :params (m/form (mu/merge TerminalRef [:map [:text :string]]))
+    :returns [:map [:sent :boolean]]}
+   {:verb "terminal-status" :surface :terminal :spi-method :terminal-status
+    :doc "Whether a terminal's job is running or finished"
+    :params TerminalRef
+    :returns [:map [:id :string] [:status [:enum "running" "finished"]]]}
+   {:verb "terminal-kill" :surface :terminal :spi-method :terminal-kill!
+    :doc "Kill a terminal's job and wipe its buffer"
+    :params TerminalRef
+    :returns [:map [:killed :boolean]]}
+   {:verb "terminal-interrupt" :surface :terminal :spi-method :terminal-interrupt!
+    :doc "Send CTRL-C to a running terminal"
+    :params TerminalRef
+    :returns [:map [:interrupted :boolean]]}
+   {:verb "terminal-read" :surface :terminal :spi-method :terminal-read
+    :doc "Visible lines of a terminal, trailing blank rows dropped"
+    :params TerminalRef
+    :returns [:map [:lines [:vector :string]]]}])
 
 ;;; ============================================================================
 ;;; Lookups

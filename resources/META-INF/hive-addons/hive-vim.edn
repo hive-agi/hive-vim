@@ -3,7 +3,7 @@
  :addon/type         :native
  :addon/init-ns      "hive-vim.addon"
  :addon/init-fn      "addon-ctor"
- :addon/capabilities #{:tools :health-reporting :editor :vessel}
- :addon/description  "Vim vessel: HVCP v1 over Vim's JSON channel, :vim editor port and `vim` tool"
+ :addon/capabilities #{:tools :health-reporting :editor :vessel :terminal}
+ :addon/description  "Vim vessel: HVCP v1 over Vim's JSON channel, :vim editor port, :vim terminal backend and `vim` tool"
  :addon/maturity     :experimental
  :addon/trust-class  :foss}

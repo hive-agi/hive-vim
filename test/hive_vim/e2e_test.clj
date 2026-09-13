@@ -10,7 +10,9 @@
             [hive-vim.addon :as vim-addon]
             [hive-vim.client :as client]
             [hive-vim.protocol.schema :as s]
-            [hive-vim.protocol.verbs :as verbs])
+            [hive-vim.protocol.verbs :as verbs]
+            [hive-addon.terminal :as term]
+            [hive-vim.terminal :as terminal])
   (:import [java.nio.file Files]
            [java.nio.file.attribute FileAttribute]))
 
@@ -52,6 +54,45 @@
   (let [result (client/invoke! (vim-addon/server addon) {:timeout-ms 5000} verb params)]
     (is (r/ok? result) (str verb " " (pr-str result)))
     (:ok result)))
+
+(defn- screen
+  "Visible lines of ling ID, empty while Vim cannot answer."
+  [tm id]
+  (let [lines (terminal/read-lines tm id)]
+    (if (map? lines) [] lines)))
+
+(defn- terminal-backend-checks
+  "ITerminalAddon against real Vim :terminal buffers."
+  [a workspace]
+  (let [tm (vim-addon/terminal a)
+        ctx {:id "ling-e2e" :cwd (str workspace)}
+        shows? (fn [id text] (some #(str/includes? % text) (screen tm id)))]
+    (testing "a ling runs in a hidden terminal buffer named hive:<id>"
+      (is (= "ling-e2e" (term/terminal-spawn! tm ctx {:command ["sh"]})))
+      (is (= {:slave/id "ling-e2e" :slave/status :running} (term/terminal-status tm ctx nil)))
+      (is (some #(= "hive:ling-e2e" (:name %)) (ok! a "special-buffers" {}))))
+    (testing "dispatch types the task and Enter; the output is readable"
+      (is (true? (term/terminal-dispatch! tm ctx {:task "echo hive-$((20+22)) && pwd"})))
+      (is (wait-until 5000 #(shows? "ling-e2e" "hive-42")) (pr-str (screen tm "ling-e2e")))
+      (is (shows? "ling-e2e" (str workspace)) "the ling started in ctx :cwd"))
+    (testing "a running id cannot be spawned twice"
+      (is (thrown? clojure.lang.ExceptionInfo (term/terminal-spawn! tm ctx {:command ["sh"]}))))
+    (testing "interrupt and kill"
+      (is (= {:success? true :ling-id "ling-e2e"} (term/terminal-interrupt! tm ctx)))
+      (is (= {:killed? true :id "ling-e2e"} (term/terminal-kill! tm ctx)))
+      (is (nil? (term/terminal-status tm ctx nil)))
+      (is (= {:killed? false :id "ling-e2e" :reason :not-found} (term/terminal-kill! tm ctx)))
+      (is (not-any? #(= "hive:ling-e2e" (:name %)) (ok! a "special-buffers" {}))))
+    (testing "a finished ling reports so, refuses input and keeps its output"
+      (let [done {:id "ling-done"}]
+        (term/terminal-spawn! tm done {:command ["sh" "-c" "echo finished-output"]})
+        (is (wait-until 5000 #(= :finished (:slave/status (term/terminal-status tm done nil)))))
+        (is (thrown? clojure.lang.ExceptionInfo (term/terminal-dispatch! tm done {:task "x"})))
+        (is (false? (:success? (term/terminal-interrupt! tm done))))
+        (is (shows? "ling-done" "finished-output"))
+        (is (= "ling-done" (term/terminal-spawn! tm done {:command ["sh"]}))
+            "a finished id can be spawned again")
+        (is (:killed? (term/terminal-kill! tm done)))))))
 
 (deftest hvcp-against-real-vim
   (if-not (available?)
@@ -121,6 +162,8 @@
                 response (handler {"command" "goto-line" "line" 3})]
             (is (not (:isError response)) (:text response))
             (is (= {:line 3} (json/read-str (:text response) :key-fn keyword)))))
+
+        (terminal-backend-checks a workspace)
 
         (testing "Vim reconnects when hive restarts"
           (addon/shutdown! a)

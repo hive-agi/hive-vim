@@ -229,6 +229,123 @@ function! s:context(params) abort
 endfunction
 
 " ---------------------------------------------------------------------------
+" Terminal verbs
+"
+" A terminal is a hidden :terminal buffer named hive:<id>, so hive-vessel's
+" :ui/send-to-terminal reaches it by that name too.
+" ---------------------------------------------------------------------------
+
+let s:terminals = {}
+
+function! s:terminal_name(id) abort
+  return 'hive:' . a:id
+endfunction
+
+function! s:need_terminal() abort
+  if !has('terminal')
+    call s:fail('unsupported', 'this Vim was built without +terminal')
+  endif
+endfunction
+
+" The live buffer of terminal ID. Forgets an entry whose buffer was wiped.
+function! s:terminal_buffer(id) abort
+  call s:need_terminal()
+  let l:nr = get(s:terminals, a:id, -1)
+  if l:nr == -1 || !bufexists(l:nr)
+    if has_key(s:terminals, a:id)
+      call remove(s:terminals, a:id)
+    endif
+    call s:fail('not-found', 'no terminal ' . a:id)
+  endif
+  return l:nr
+endfunction
+
+function! s:running(nr) abort
+  return term_getstatus(a:nr) =~# 'running'
+endfunction
+
+function! s:terminal_spawn(params) abort
+  call s:need_terminal()
+  let l:id = s:need(a:params, 'id', v:t_string)
+  let l:cmd = s:need(a:params, 'cmd', v:t_list)
+  if has_key(s:terminals, l:id) && bufexists(s:terminals[l:id])
+    if s:running(s:terminals[l:id])
+      call s:fail('invalid-params', 'terminal already running: ' . l:id)
+    endif
+    execute 'bwipeout!' s:terminals[l:id]
+  endif
+  let l:opts = {'term_name': s:terminal_name(l:id), 'hidden': 1, 'norestore': 1,
+        \ 'term_kill': 'kill'}
+  if has_key(a:params, 'cwd')
+    let l:cwd = s:need(a:params, 'cwd', v:t_string)
+    if !isdirectory(l:cwd)
+      call s:fail('invalid-params', 'cwd is not a directory: ' . l:cwd)
+    endif
+    let l:opts.cwd = l:cwd
+  endif
+  if has_key(a:params, 'env')
+    let l:opts.env = s:need(a:params, 'env', v:t_dict)
+  endif
+  let l:nr = term_start(l:cmd, l:opts)
+  if l:nr == 0
+    call s:fail('vim-error', 'term_start failed for ' . string(l:cmd))
+  endif
+  let s:terminals[l:id] = l:nr
+  return {'id': l:id, 'buffer': l:nr, 'name': bufname(l:nr)}
+endfunction
+
+function! s:terminal_dispatch(params) abort
+  let l:nr = s:terminal_buffer(s:need(a:params, 'id', v:t_string))
+  let l:text = s:need(a:params, 'text', v:t_string)
+  if !s:running(l:nr)
+    call s:fail('unsupported', 'terminal has finished')
+  endif
+  call term_sendkeys(l:nr, l:text . "\r")
+  return {'sent': v:true}
+endfunction
+
+function! s:terminal_status(params) abort
+  let l:id = s:need(a:params, 'id', v:t_string)
+  let l:nr = s:terminal_buffer(l:id)
+  return {'id': l:id, 'status': s:running(l:nr) ? 'running' : 'finished'}
+endfunction
+
+function! s:terminal_kill(params) abort
+  let l:id = s:need(a:params, 'id', v:t_string)
+  let l:nr = s:terminal_buffer(l:id)
+  if s:running(l:nr)
+    call job_stop(term_getjob(l:nr), 'kill')
+  endif
+  execute 'bwipeout!' l:nr
+  call remove(s:terminals, l:id)
+  return {'killed': v:true}
+endfunction
+
+function! s:terminal_interrupt(params) abort
+  let l:nr = s:terminal_buffer(s:need(a:params, 'id', v:t_string))
+  if !s:running(l:nr)
+    call s:fail('unsupported', 'terminal has finished')
+  endif
+  call term_sendkeys(l:nr, "\<C-c>")
+  return {'interrupted': v:true}
+endfunction
+
+" Screen rows of a running terminal, buffer lines of a finished one; trailing
+" blank rows dropped.
+function! s:terminal_read(params) abort
+  let l:nr = s:terminal_buffer(s:need(a:params, 'id', v:t_string))
+  if s:running(l:nr)
+    let l:lines = map(range(1, term_getsize(l:nr)[0]), {_, row -> term_getline(l:nr, row)})
+  else
+    let l:lines = getbufline(l:nr, 1, '$')
+  endif
+  while !empty(l:lines) && l:lines[-1] =~# '^\s*$'
+    call remove(l:lines, -1)
+  endwhile
+  return {'lines': l:lines}
+endfunction
+
+" ---------------------------------------------------------------------------
 " Dispatch
 " ---------------------------------------------------------------------------
 
@@ -248,11 +365,19 @@ let s:handlers = {
       \ 'insert': function('s:insert'),
       \ 'recent': function('s:recent'),
       \ 'project-root': function('s:project_root'),
-      \ 'context': function('s:context')}
+      \ 'context': function('s:context'),
+      \ 'terminal-spawn': function('s:terminal_spawn'),
+      \ 'terminal-dispatch': function('s:terminal_dispatch'),
+      \ 'terminal-status': function('s:terminal_status'),
+      \ 'terminal-kill': function('s:terminal_kill'),
+      \ 'terminal-interrupt': function('s:terminal_interrupt'),
+      \ 'terminal-read': function('s:terminal_read')}
 
 let s:verbs = ['eval', 'notify', 'status', 'capabilities', 'buffers', 'current',
       \ 'buffer-info', 'special-buffers', 'switch', 'find', 'save', 'goto-line',
-      \ 'insert', 'recent', 'project-root', 'context']
+      \ 'insert', 'recent', 'project-root', 'context',
+      \ 'terminal-spawn', 'terminal-dispatch', 'terminal-status', 'terminal-kill',
+      \ 'terminal-interrupt', 'terminal-read']
 
 function! hive#rpc#verbs() abort
   return copy(s:verbs)

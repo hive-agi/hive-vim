@@ -7,7 +7,9 @@
             [hive-vim.addon :as vim-addon]
             [hive-vim.fake-vim :as fake]
             [hive-vim.transport :as t]
-            [hive-vim.vessel :as vessel])
+            [hive-vim.vessel :as vessel]
+            [hive-addon.terminal :as term]
+            [hive-vessel.core :as v])
   (:import [java.io File]))
 
 ;; Copyright (C) 2026 Pedro Gomes Branquinho (BuddhiLW) <pedrogbranquinho@gmail.com>
@@ -62,9 +64,9 @@
         (let [iv (vessel/->ivessel (vim-addon/vessel a))]
           (is (hv/vessel? iv))
           (is (= :vim (hv/vessel-id iv)))
-          (is (= #{:editor} (hv/capabilities iv)))
+          (is (= #{:terminal :editor} (hv/capabilities iv)))
           (is (identical? (registry/get-port :vim) (hv/addon iv :editor)))
-          (is (nil? (hv/addon iv :terminal)))
+          (is (identical? (vim-addon/terminal a) (hv/addon iv :terminal)))
           (is (nil? (hv/resolve-context iv "ling-1")))))
       (testing "shutdown! reverses everything"
         (let [server (vim-addon/server a)]
@@ -76,6 +78,78 @@
           (is (= :down (:status (addon/health a))))))
       (testing "shutdown! is idempotent"
         (is (nil? (addon/shutdown! a))))
+      (finally
+        (addon/shutdown! a)))))
+
+(defn- stub-dependency
+  "A mounted sibling addon that ships one :vessel/translators hook, as
+   hive.carto-flow does. hive.vim never names it."
+  [translators]
+  (reify addon/IAddon
+    (addon-id [_] "stub.translators")
+    (addon-type [_] :native)
+    (capabilities [_] #{})
+    (initialize! [_ _] {:success? true :errors []})
+    (shutdown! [_] nil)
+    (tools [_] [])
+    (schema-extensions [_] [])
+    (health [_] {:status :ok})
+    (excluded-tools [_] #{})
+    (hooks [_] {:vessel/translators translators})))
+
+(deftest composes-through-hooks
+  (let [hello {:translator/id :stub/hello
+               :translator/op :stub/hello
+               :translator/translate (fn [{:keys [who]} _]
+                                       {:op :ui/notify :message (str "hello " who) :level :info})}
+        events (atom [])
+        a (vim-addon/addon-ctor {:vim/port-file (temp-port-file)})]
+    (is (= {} (addon/hooks a)) "no hooks before initialize!")
+    (try
+      (let [result (addon/initialize! a {:mount/dependencies
+                                         {"stub.translators" (stub-dependency [hello])}})]
+        (is (:success? result))
+        (is (= (inc (count (:registry/translators (v/standard-registry))))
+               (get-in result [:metadata :translators]))
+            "standard translators plus the dependency's"))
+      (let [hooks (addon/hooks a)]
+        (is (= vim-addon/hook-keys (set (keys hooks))))
+        (is (every? fn? (vals hooks)))
+        (testing "listener seat receives transport events"
+          (is (true? ((:vim/register-listener! hooks) :test (fn [e p] (swap! events conj [e p]))))))
+        (let [vim (fake/start-raw! (vim-addon/server a) (fn [f args] [f args]))]
+          (is (wait-until #(some (fn [[e]] (= :vim/connected e)) @events)))
+          (fake/event! vim 9 {:type "focus"})
+          (is (wait-until #(some (fn [[e p]] (and (= :vim/event e)
+                                                  (= "focus" (get-in p [:event :type]))))
+                                 @events)))
+          (testing "a dependency's intent lowers onto Vim through :vessel/dispatch!"
+            (let [result ((:vessel/dispatch! hooks) {:op :stub/hello :who "vim"})]
+              (is (:ok result) (pr-str result))
+              (is (= ["hive_vessel#notify" ["hello vim" "info"]] (last @(:calls vim))))))
+          (testing "translators registered at runtime join the registry"
+            ((:vessel/register-translators! hooks)
+             [{:translator/id :later/ping :translator/op :later/ping
+               :translator/translate (fn [_ _] {:op :vim/call :fn "Ping" :args [1]})}])
+            (is (:ok ((:vessel/dispatch! hooks) {:op :later/ping})))
+            (is (= ["Ping" [1]] (last @(:calls vim)))))
+          (testing "unregistered listeners stop receiving"
+            ((:vim/unregister-listener! hooks) :test)
+            (let [n (count @events)]
+              (fake/event! vim 10 {:type "focus"})
+              (Thread/sleep 100)
+              (is (= n (count @events)))))
+          (fake/stop! vim))
+        (testing "target, vessel instance and terminal are the addon's own"
+          (is (= :vim-channel (:vessel/dialect ((:vessel/target hooks)))))
+          (let [iv ((:vessel/instance hooks))]
+            (is (hv/vessel? iv))
+            (is (= #{:editor :terminal} (hv/capabilities iv)))
+            (is (identical? ((:vim/terminal hooks)) (hv/addon iv :terminal))))
+          (is (= :vim (term/terminal-id ((:vim/terminal hooks)))))
+          (is (identical? (registry/get-port :vim) ((:vim/editor-port hooks))))))
+      (addon/shutdown! a)
+      (is (= {} (addon/hooks a)) "no hooks after shutdown!")
       (finally
         (addon/shutdown! a)))))
 

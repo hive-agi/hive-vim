@@ -160,8 +160,9 @@
 ;;; ============================================================================
 
 (def Surface
-  "The hive-spi editor protocol a verb backs."
-  [:enum :substrate :buffer])
+  "The host contract a verb backs: a hive-spi editor protocol, or hive-addon's
+   ITerminalAddon."
+  [:enum :substrate :buffer :terminal])
 
 (def VerbSpec
   [:map {:closed true}

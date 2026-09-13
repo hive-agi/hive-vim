@@ -10,7 +10,10 @@
             [hive-addon.protocol :as addon]
             [hive-vim.addon :as vim-addon]
             [hive-vim.client :as client]
-            [hive-vim.vessel :as vessel])
+            [hive-vim.vessel :as vessel]
+            [hive-addon.terminal :as term]
+            [hive-vim.terminal :as terminal]
+            [clojure.string :as str])
   (:import [java.nio.file Files]
            [java.nio.file.attribute FileAttribute]))
 
@@ -76,7 +79,7 @@
 
         (let [registry (standard-registry)
               target (vessel/vessel-target (vim-addon/server a))
-              run (fn [op] (dispatch! registry target op))]
+              run (:vessel/dispatch! (addon/hooks a))]
 
           (testing "the target is a hive-vessel vessel"
             (is (= :vim (:vessel/id target)))
@@ -101,6 +104,18 @@
                                                  "eval" {:code "hive_vessel#panel_lines('hv')"}))]
                 (is (= (mapv :text (render-lines doc)) (:value painted))
                     "Vim painted exactly the rendered lines"))))
+
+          (testing ":ui/send-to-terminal reaches a ling the terminal backend spawned"
+            (let [tm (vim-addon/terminal a)
+                  ctx {:id "ling-v"}]
+              (term/terminal-spawn! tm ctx {:command ["sh"]})
+              (is (:ok (run {:op :ui/send-to-terminal
+                             :terminal (terminal/terminal-name "ling-v")
+                             :text "echo via-$((1+1))-vessel\r"})))
+              (is (wait-until 5000 #(let [lines (terminal/read-lines tm "ling-v")]
+                                      (and (vector? lines)
+                                           (some (fn [l] (str/includes? l "via-2-vessel")) lines)))))
+              (is (:killed? (term/terminal-kill! tm ctx)))))
 
           (testing "an executor failure is a loud dispatch error, not a silent drop"
             ;; Translator fallback covers TRANSLATION failures only. A throwing

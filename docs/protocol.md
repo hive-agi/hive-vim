@@ -111,6 +111,22 @@ tool, the `IEditorPort` reification and the Vim-side conformance check
 | `project-root` | `project-root` | none |
 | `context` | `editor-context` | none |
 
+Terminal verbs back hive-addon's `ITerminalAddon` (surface `:terminal`), plus
+`terminal-read`. A terminal is a hidden `:terminal` buffer named `hive:<id>`, so
+hive-vessel's `:ui/send-to-terminal` reaches it by that name as well.
+
+| Verb | ITerminalAddon method | Params |
+|---|---|---|
+| `terminal-spawn` | `terminal-spawn!` | `id`, `cmd` (argv), `cwd`, `env` |
+| `terminal-dispatch` | `terminal-dispatch!` | `id`, `text` (sent followed by Enter) |
+| `terminal-status` | `terminal-status` | `id` -> `running` or `finished` |
+| `terminal-kill` | `terminal-kill!` | `id` (kills the job, wipes the buffer) |
+| `terminal-interrupt` | `terminal-interrupt!` | `id` (sends CTRL-C) |
+| `terminal-read` | none | `id` -> visible lines |
+
+An unknown id is `not-found`; input to a finished terminal is `unsupported`;
+spawning an id whose terminal is still running is `invalid-params`.
+
 ## L4: events
 
 Vim reports editor activity as requests:
@@ -122,3 +138,24 @@ Vim reports editor activity as requests:
 Event types: `buf-enter`, `buf-write`, `focus`, `vim-leave`. hive replies
 `[7, "ok"]` and forwards the event to its injected emit function. The most
 recently active session becomes the default target for verbs.
+
+## IAddon composition
+
+hive.vim is a hive-vessel vessel IAddon. It extends nothing by editing a host
+or a sibling: its registry is hive-vessel's standard translators plus the
+`:vessel/translators` hook of every addon the mount injects under
+`:mount/dependencies`, and everything it offers is an IAddon hook
+(`hive-vim.addon/hook-keys`), present only while the addon is active.
+
+| Hook | Shape | Used for |
+|---|---|---|
+| `:vessel/target` | `(fn [])` | the hive-vessel `:vim-channel` target |
+| `:vessel/instance` | `(fn [])` | hive-addon IVessel with `:editor` and `:terminal` |
+| `:vessel/dispatch!` | `(fn [op-or-ops])` | plan and run hive-vessel ops on Vim |
+| `:vessel/register-translators!` | `(fn [translators])` | extend this vessel's registry at runtime |
+| `:vim/editor-port` | `(fn [])` | the hive-spi editor port |
+| `:vim/terminal` | `(fn [])` | the ITerminalAddon running lings in Vim |
+| `:vim/register-listener!` | `(fn [id f])` | `(f event payload)` for `:vim/connected`, `:vim/event`, `:vim/disconnected` |
+| `:vim/unregister-listener!` | `(fn [id])` | stop receiving |
+
+`:vim/emit-fn` in addon config receives the same events as listeners.

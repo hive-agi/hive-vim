@@ -13,7 +13,8 @@
   (:require [hive-addon.vessel :as vessel]
             [hive-dsl.result :as r]
             [hive-vim.client :as client]
-            [taoensso.timbre :as log]))
+            [taoensso.timbre :as log]
+            [hive-vim.terminal :as terminal]))
 
 ;; Copyright (C) 2026 Pedro Gomes Branquinho (BuddhiLW) <pedrogbranquinho@gmail.com>
 ;;
@@ -22,21 +23,30 @@
 (def capabilities #{:editor})
 
 (defn create-vim-vessel
-  "Descriptor for the Vim vessel. PORT-FN returns the :vim editor port or nil."
-  [port-fn]
-  {:vessel/id :vim
-   :vessel/capabilities capabilities
-   ;; Vim sessions are editors, not agent hosts: no agent runs inside one yet.
-   :vessel/resolve-context (fn [_agent-id] nil)
-   :vessel/addon (fn [capability]
-                   (when (= :editor capability) (port-fn)))
-   :vessel/initialize! (fn [config]
-                         (log/info "Vim vessel initialized"
-                                   (when config {:config-keys (keys config)}))
-                         nil)
-   :vessel/shutdown! (fn []
-                       (log/info "Vim vessel shut down")
-                       nil)})
+  "Descriptor for the Vim vessel. PORT-FN returns the :vim editor port or nil;
+   TERMINAL-FN, when given, returns the VimTerminal or nil."
+  ([port-fn] (create-vim-vessel port-fn (constantly nil)))
+  ([port-fn terminal-fn]
+   {:vessel/id :vim
+    :vessel/capabilities (cond-> capabilities (terminal-fn) (conj :terminal))
+    ;; Agents run in Vim only through the terminal: context is what spawn recorded.
+    :vessel/resolve-context (fn [agent-id]
+                              (when-let [t (and agent-id (terminal-fn))]
+                                (let [ctx (select-keys (terminal/context-of t agent-id)
+                                                       [:cwd :project-id])]
+                                  (when (seq ctx) ctx))))
+    :vessel/addon (fn [capability]
+                    (case capability
+                      :editor (port-fn)
+                      :terminal (terminal-fn)
+                      nil))
+    :vessel/initialize! (fn [config]
+                          (log/info "Vim vessel initialized"
+                                    (when config {:config-keys (keys config)}))
+                          nil)
+    :vessel/shutdown! (fn []
+                        (log/info "Vim vessel shut down")
+                        nil)}))
 
 (def dialect
   "The hive-vessel dialect this vessel speaks."
