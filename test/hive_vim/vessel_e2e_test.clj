@@ -1,9 +1,8 @@
 (ns hive-vim.vessel-e2e-test
   "A hive-vessel action reaching a real Vim through the hive-vim executor.
 
-   hive-vessel is unpublished, so it arrives via local.deps.edn:
-     clojure -Sdeps \"$(cat local.deps.edn)\" -M:test
-   Without it on the classpath this test skips, like the vim/tmux e2e."
+   hive-vessel and its Vim plugin come from the classpath (the git-pinned coord,
+   or local.deps.edn). Without them, vim or tmux, this test skips."
   (:require [clojure.java.io :as io]
             [clojure.java.shell :as shell]
             [clojure.test :refer [deftest is testing]]
@@ -25,9 +24,17 @@
   [sym]
   (try (requiring-resolve sym) (catch Exception _ nil)))
 
+(def ^:private vessel-runtime
+  "hive-vessel's Vim plugin directory, from the classpath, or nil when hive-vessel
+   is absent or packaged in a jar."
+  (when-let [url (io/resource "hive-vessel/vim")]
+    (when (= "file" (.getProtocol url))
+      (.getCanonicalPath (io/file (.toURI url))))))
+
 (defn- available?
   []
   (and (resolve-fn 'hive-vessel.core/standard-registry)
+       vessel-runtime
        (zero? (:exit (shell/sh "sh" "-c" "command -v vim && command -v tmux")))))
 
 (defn- wait-until
@@ -41,10 +48,6 @@
 (defn- temp-dir
   []
   (.getCanonicalFile (.toFile (Files/createTempDirectory "hive-vim-vessel" (make-array FileAttribute 0)))))
-
-(def ^:private vessel-runtime
-  "hive-vessel ships its Vim plugin as a resource directory."
-  (str (io/file (System/getProperty "user.dir") ".." "hive-vessel" "resources" "hive-vessel" "vim")))
 
 (defn- start-vim!
   [tmux-session workspace port-file]
