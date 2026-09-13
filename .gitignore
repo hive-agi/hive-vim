@@ -6,3 +6,4 @@ target/
 *.class
 local.deps.edn
 .nrepl-port
+.clj-kondo/
