@@ -18,7 +18,9 @@
             [hive-vim.tools.vim :as vim-tool]
             [hive-vim.transport :as transport]
             [hive-vim.vessel :as vessel]
-            [taoensso.timbre :as log]))
+            [taoensso.timbre :as log]
+            [hive-spi.vessel :as render-port]
+            [hive-vessel.renderer :as renderer]))
 
 ;; Copyright (C) 2026 Pedro Gomes Branquinho (BuddhiLW) <pedrogbranquinho@gmail.com>
 ;;
@@ -153,12 +155,20 @@
       {})))
 
 (defrecord HiveVimAddon [state seed]
+  render-port/IRenderer
+  (renderer-id [_] addon-id-value)
+  (render! [_ ops] (renderer/deliver! (:target @state) ops))
   addon/IAddon
   (addon-id [_] addon-id-value)
   (addon-type [_] :native)
   (capabilities [_] #{:tools :health-reporting :editor :vessel :terminal})
-  (initialize! [_ runtime-config] (initialize-addon! state seed runtime-config))
-  (shutdown! [_] (shutdown-addon! state))
+  (initialize! [this runtime-config]
+    (let [result (initialize-addon! state seed runtime-config)]
+      (when (:success? result) (renderer/register! this))
+      result))
+  (shutdown! [this]
+    (renderer/unregister! this)
+    (shutdown-addon! state))
   (tools [_]
     (if (= :active (:lifecycle @state))
       (vim-tool/tools #(:server @state))

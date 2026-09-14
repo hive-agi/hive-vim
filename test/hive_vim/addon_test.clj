@@ -9,7 +9,9 @@
             [hive-vim.transport :as t]
             [hive-vim.vessel :as vessel]
             [hive-addon.terminal :as term]
-            [hive-vessel.core :as v])
+            [hive-vessel.core :as v]
+            [hive-spi.vessel :as render-port]
+            [hive-vessel.renderer :as renderer])
   (:import [java.io File]))
 
 ;; Copyright (C) 2026 Pedro Gomes Branquinho (BuddhiLW) <pedrogbranquinho@gmail.com>
@@ -47,6 +49,9 @@
       (testing "initialize! starts the transport and registers :vim"
         (let [result (addon/initialize! a {})]
           (is (:success? result))
+        (is (satisfies? render-port/IRenderer a))
+        (is (identical? a (get @renderer/renderers "hive.vim")))
+        (is (:error (render-port/render! a [{:op :ui/send-to-terminal :text "forbidden"}])))
           (is (= (str (get-in result [:metadata :port])) (.trim ^String (slurp port-file))))
           (is (contains? (registry/registered-ports) :vim))
           (is (= ["vim"] (map :name (addon/tools a))))
@@ -72,6 +77,7 @@
         (let [server (vim-addon/server a)]
           (addon/shutdown! a)
           (is (not (t/running? server)))
+        (is (not (contains? @renderer/renderers "hive.vim")))
           (is (not (.exists (io/file port-file))))
           (is (not (contains? (registry/registered-ports) :vim)))
           (is (= [] (addon/tools a)))

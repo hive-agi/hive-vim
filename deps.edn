@@ -14,10 +14,10 @@
         io.github.hive-agi/hive-addon {:mvn/version "1.0.5"}
 
         ;; IEditorPort family: the host-facing verb contract this addon reifies.
-        io.github.hive-agi/hive-spi {:mvn/version "1.1.0"}
+        io.github.hive-agi/hive-spi {:mvn/version "1.1.1"}
 
         ;; Vessel registry the addon composes through hooks. Git-pinned until
-        io.github.hive-agi/hive-vessel {:mvn/version "0.1.2"}}
+        io.github.hive-agi/hive-vessel {:mvn/version "0.1.4"}}
 
  :aliases
  {:test
