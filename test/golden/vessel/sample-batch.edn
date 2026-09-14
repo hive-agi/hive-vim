@@ -1,0 +1,32 @@
+[["call"
+  "hive_vessel#show_panel"
+  ["olympus/tab-2"
+   "Carto \"Flow\" \\ #3"
+   [{"text" "Carto \"Flow\" \\ #3", "face" "title"}
+    {"text" "", "face" "plain"}
+    {"text" "apply write-form", "face" "heading"}
+    {"text" "", "face" "plain"}
+    {"text" "succeeded", "face" "success"}
+    {"text" "", "face" "plain"}
+    {"text" "paths  : src/a.clj", "face" "plain"}
+    {"text" "         src/b.clj", "face" "plain"}
+    {"text" "verify : ok", "face" "plain"}
+    {"text" "", "face" "plain"}
+    {"text" "  - one", "face" "plain"}
+    {"text" "  - two", "face" "plain"}
+    {"text" "    more", "face" "plain"}
+    {"text" "", "face" "plain"}
+    {"text" "    (defn f [] \"x\")", "face" "code"}
+    {"text" "", "face" "plain"}
+    {"text" "@@ -1,2 +1,2 @@", "face" "hunk"}
+    {"text" "-(old)", "face" "removed"}
+    {"text" "+(new ü)", "face" "added"}
+    {"text" " context", "face" "plain"}
+    {"text" "", "face" "plain"}
+    {"text" "open a", "face" "link", "file" "/tmp/a.clj", "line" 2}]]]
+ ["call" "hive_vessel#notify" ["frame 7 applied" "info"]]
+ ["call" "hive_vessel#notify" ["boom\nsecond line" "error"]]
+ ["call" "hive_vessel#open_file" ["/tmp/a b.clj" 3 7]]
+ ["call" "hive_vessel#open_file" ["/tmp/a.clj" 1 1]]
+ ["call" "hive_vessel#send_to_terminal" ["*vterm*" "ls -la\n"]]
+ ["call" "hive_vessel#close_panel" ["olympus/tab-2"]]]
