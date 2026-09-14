@@ -230,23 +230,26 @@
     (try
       (.setSoTimeout socket (int (:hello-timeout-ms server)))
       (let [{:keys [id hello reply]} (handshake server reader)]
-        (when id
-          (write-frame! session (codec/reply-frame id reply)))
         (if (:accepted reply)
           (let [session (assoc session
                                :id (:session reply)
                                :hello hello
                                :connected-at (now server)
                                :last-active (atom (now server)))]
+            ;; Register BEFORE replying: the reply names the session id, and a
+            ;; caller that acts on it the moment the reply lands must find it.
             (.setSoTimeout socket 0)
             (swap! (:sessions server) assoc (:id session) session)
-            (emit! server :vim/connected {:session (:id session) :hello hello})
-            (log/info "Vim session connected" {:session (:id session) :pid (:pid hello)})
             (try
+              (write-frame! session (codec/reply-frame id reply))
+              (emit! server :vim/connected {:session (:id session) :hello hello})
+              (log/info "Vim session connected" {:session (:id session) :pid (:pid hello)})
               (serve-session! server session reader)
               (finally
                 (drop-session! server session))))
           (do
+            (when id
+              (write-frame! session (codec/reply-frame id reply)))
             (log/info "Vim connection rejected" {:reason (:reason reply)})
             (close-quietly! socket))))
       (catch SocketTimeoutException _

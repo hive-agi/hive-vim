@@ -20,6 +20,8 @@
 (defn- connect
   [server]
   (let [socket (Socket. "127.0.0.1" (int (t/port server)))]
+    ;; A read that never returns fails the test instead of hanging the suite.
+    (.setSoTimeout socket 10000)
     {:socket socket
      :reader (BufferedReader. (InputStreamReader. (.getInputStream socket)
                                                   StandardCharsets/UTF_8))
@@ -140,19 +142,44 @@
     @answered
     (close client)))
 
+(deftest the-session-is-usable-the-moment-the-hello-reply-lands
+  ;; The accepted hello reply names a session id; a request on that id issued
+  ;; as soon as the reply is read must reach Vim. Registering the session
+  ;; after replying left a window in which request! answered :vim/no-session
+  ;; without sending a frame (measured 2026-09-13 as a suite hang under a
+  ;; cold JVM). Many trials, because the window is a scheduling race.
+  (let [outcomes (doall
+                  (for [_ (range 40)]
+                    (let [client (connect-hello *server*)
+                          session (:session (:reply client))
+                          answered (serve-dispatch client 1 (fn [verb _] {:ok verb}))
+                          result (t/request! *server* session
+                                             #(codec/dispatch-op "status" {} %) 2000)]
+                      (deref answered 2000 ::unanswered)
+                      (close client)
+                      (if (r/ok? result) :ok (:error result)))))]
+    (is (= {:ok 40} (frequencies outcomes)))))
+
 (deftest concurrent-requests-are-correlated
   (let [client (connect-hello *server*)
         session (:session (:reply client))
         n 20
+        ;; Bounded: a reader that never sees its n-th frame fails the test
+        ;; instead of hanging the suite.
         frames (future (doall (repeatedly n #(recv-frame client))))
         results (mapv (fn [i]
                         (future (t/request! *server* session
                                             #(codec/dispatch-op "eval" {:code (str i)} %)
-                                            2000)))
-                      (range n))]
-    (doseq [[_call _ [_ {:keys [code]}] id] (reverse @frames)]
-      (send-frame client [id {:ok code}]))
-    (is (= (mapv #(r/ok {:ok (str %)}) (range n)) (mapv deref results)))
+                                            5000)))
+                      (range n))
+        received (deref frames 4000 ::hung)]
+    (is (not= ::hung received)
+        (str "the reader never saw all " n " request frames; requests answered so far: "
+             (pr-str (mapv #(deref % 0 ::pending) results))))
+    (when (not= ::hung received)
+      (doseq [[_call _ [_ {:keys [code]}] id] (reverse received)]
+        (send-frame client [id {:ok code}]))
+      (is (= (mapv #(r/ok {:ok (str %)}) (range n)) (mapv deref results))))
     (close client)))
 
 (deftest unanswered-requests-time-out
