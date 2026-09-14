@@ -3,4 +3,4 @@
  :description "Vim vessel addon for the hive ecosystem: HVCP v1 (hive Vim Control Protocol) over Vim's JSON channel, hive-spi IEditorPort for :vim, and the `vim` MCP tool."
  :language :clojure
  :tags ["hive-vim" "vim" "vessel" "editor" "addon" "hvcp" "channel"]
- :carto {:source-roots ["resources" "src" "test"]}}
+ :carto {:source-roots ["resources" "src" "test" "vim"]}}
