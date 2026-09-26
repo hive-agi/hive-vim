@@ -8,7 +8,7 @@
         io.github.hive-agi/hive-dsl {:mvn/version "0.5.33"}
 
         ;; HVCP value objects and verb params are malli schemas.
-        metosin/malli {:mvn/version "0.20.1"}
+        metosin/malli {:mvn/version "0.20.2"}
 
         ;; IAddon + IVessel contracts. The addon never compiles against a host.
         io.github.hive-agi/hive-addon {:mvn/version "1.0.15"}
