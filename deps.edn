@@ -17,7 +17,7 @@
         io.github.hive-agi/hive-spi {:mvn/version "1.4.4"}
 
         ;; Vessel registry the addon composes through hooks. Git-pinned until
-        io.github.hive-agi/hive-vessel {:mvn/version "0.1.17"}}
+        io.github.hive-agi/hive-vessel {:mvn/version "0.1.18"}}
 
  :aliases
  {:test
