@@ -11,7 +11,7 @@
         metosin/malli {:mvn/version "0.20.3"}
 
         ;; IAddon + IVessel contracts. The addon never compiles against a host.
-        io.github.hive-agi/hive-addon {:mvn/version "1.1.8"}
+        io.github.hive-agi/hive-addon {:mvn/version "1.1.10"}
 
         ;; IEditorPort family: the host-facing verb contract this addon reifies.
         io.github.hive-agi/hive-spi {:mvn/version "1.4.9"}
